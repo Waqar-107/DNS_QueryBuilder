@@ -110,7 +110,9 @@ class dns_query:
         
         # for i in range(0, len(question_section), 2):
         #     print(question_section[i : i + 2], end=" ")
-            
+        
+        self.question_len = len(question_section)
+        
         return question_section
     
     
@@ -121,7 +123,9 @@ class dns_query:
         
         try:
             sock.sendto(binascii.unhexlify(msg), (self.server_ip, self.port))
-            data, _ = sock.recvfrom(4096)
+            print("udp sent")
+            
+            data, x = sock.recvfrom(4096)
         finally:
             sock.close()
             
@@ -186,22 +190,37 @@ class dns_query:
         #----------------------------------------
         
         #question section is the same as the query
+        question = res[24 : 24 + self.question_len]
         
         #----------------------------------------
         # answer
+        answer_section = res[24 + self.question_len :]
+        
+        # [12 : 16] => don't know the fuck it denotes, it is 00 00
+        NAME = answer_section[0 : 4]
+        TYPE = answer_section[4 : 8]
+        CLASS = answer_section[8 : 12]
+        TTL = answer_section[16 : 20]
+        RDLENGTH = int(answer_section[20 : 24], 16)
+        RDDATA = answer_section[24 : ]
+        
+        if showReport : 
+            print("TTL :", int(TTL, 16), "seconds")
+            print("RDLENGTH :", RDLENGTH, "bytes")
+            
+        #5D B8  D8 22
+        ip_adress_chunks = []
+        for i in range(0, RDLENGTH * 2, 2):
+            ip_adress_chunks.append(str(int(RDDATA[i : i + 2], 16)))
+            
+        return ".".join(ip_adress_chunks)  
         #----------------------------------------
         
         
-    
-    
     def getIP(self, domain_name, showReport):
         header = self.buildHeader()
         question = self.buildQuestion(domain_name)
         
         res = self.send_udp(header + question)
-        self.parseResponse(res, showReport)
         
-
-
-q = dns_query("8.8.8.8", 53)
-q.getIP("example.com", True)
+        return self.parseResponse(res, showReport)
