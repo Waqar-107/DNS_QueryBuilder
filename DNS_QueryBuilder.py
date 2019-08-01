@@ -1,6 +1,7 @@
 # from dust i have come, dust i will be
 
 import socket
+import binascii
 
 class dns_query:
     def __init__(self, server_ip, port):
@@ -47,7 +48,6 @@ class dns_query:
         
         # same will be returned in the response of the query - 16 bits
         ID = self.getBinary(self.query_no, 16)
-        self.query_no += 1
         
         # 1 4 1 1 1 1 3 4
         # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
@@ -82,10 +82,8 @@ class dns_query:
     
     def buildQuestion(self, domain_name) :
         question_section = ""
-    
         partitions = domain_name.split('.')
-        print(partitions)
-    
+        
         QNAME = ""
         for p in partitions : 
             QNAME += self.getBinary(len(p), 8)
@@ -108,20 +106,102 @@ class dns_query:
         # do not use extra padding!!!
         for i in range(0, len(temp_question), 4):
             hx = hex(int(temp_question[i : i + 4], 2))
-            question_section += hx[2 : 0]
+            question_section += hx[2 : ]
         
-        for i in range(0, len(question_section), 2):
-            print(question_section[i : i + 2], end=" ")
+        # for i in range(0, len(question_section), 2):
+        #     print(question_section[i : i + 2], end=" ")
             
         return question_section
     
     
-    def getIP(self, domain_name):
-        self.domain_name = domain_name
+    def send_udp(self, msg):
+        # no blank or newline
+        msg = msg.replace(" ", "").replace("\n", "")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         
-        self.buildQuestion(domain_name);
+        try:
+            sock.sendto(binascii.unhexlify(msg), (self.server_ip, self.port))
+            data, _ = sock.recvfrom(4096)
+        finally:
+            sock.close()
+            
+        return binascii.hexlify(data).decode("utf-8")
+    
+    
+    def parseResponse(self, res, showReport):
         
-        return "127.0.0.1"
+        #----------------------------------------
+        # header
+        head = []
+        for i in range(0, 24, 4):
+            head.append(res[i : i + 4])
+            
+        ID = head[0]
+        flags = head[1]
+        question_quantity = head[2]
+        answer_quantity = head[3]
+        authority_records = head[4]
+        additional_records = head[5]
+        
+        #check id
+        if(int(ID, 16) != self.query_no):
+            print("error : id not matched")
+            print("query-id :", self.query_no)
+            print("response-id :", int(ID, 16))
+            return "-1"
+            
+        self.query_no += 1
+        
+        #check flags
+        flags = self.getBinary(int(flags, 16), 16)
+        
+        # 1 4 1 1 1 1 3 4
+        # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
+        QR = flags[0]
+        opcode = flags[1 : 5]
+        AA = flags[5]
+        TC = flags[6]
+        RD = flags[7]
+        RA = flags[8]
+        Z = flags[9 : 12]
+        RCODE = flags[12 : 16]
+        
+        if int(RCODE, 2) != 0:
+            print(RCODE, "error reported")
+            return "-1"
+        
+        # additional info
+        if showReport:
+            print("No errors reported")
+            
+            if int(AA, 2) == 0:
+                print("This server isn’t an authority for the given domain name")
+        
+            if int(RD, 2) == 1:
+                print("Recursion was desired for this request")
+            
+            if int(RA, 2) == 1:
+                print("Recursion is available on this DNS server")
+        
+        #----------------------------------------
+        
+        #question section is the same as the query
+        
+        #----------------------------------------
+        # answer
+        #----------------------------------------
+        
+        
+    
+    
+    def getIP(self, domain_name, showReport):
+        header = self.buildHeader()
+        question = self.buildQuestion(domain_name)
+        
+        res = self.send_udp(header + question)
+        self.parseResponse(res, showReport)
+        
+
 
 q = dns_query("8.8.8.8", 53)
-q.getIP("example.com")
+q.getIP("example.com", True)
