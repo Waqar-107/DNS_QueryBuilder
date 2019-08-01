@@ -70,15 +70,58 @@ class dns_query:
         NSCOUNT = self.getBinary(0, 16)
         ARCOUNT = self.getBinary(0, 16)
         
-        header = ID + QR + opcode + AA + TC + RD + RA + Z + RCODE + QDCOUNT + ANCOUNT + NSCOUNT + ARCOUNT
-        print(len(header)//4)
+        temp = ID + QR + opcode + AA + TC + RD + RA + Z + RCODE + QDCOUNT + ANCOUNT + NSCOUNT + ARCOUNT
+        
+        # make the binary header hex
+        for i in range(0, len(temp), 4):
+            hx = hex(int(temp[i : i + 4], 2))
+            header += hx[2 : ]
         
         return header
         
+    
+    def buildQuestion(self, domain_name) :
+        question_section = ""
+    
+        partitions = domain_name.split('.')
+        print(partitions)
+    
+        QNAME = ""
+        for p in partitions : 
+            QNAME += self.getBinary(len(p), 8)
+            
+            for i in range(len(p)):
+                QNAME += self.getBinary(ord(p[i]), 8)
         
+        # end of the domain
+        QNAME += self.getBinary(0, 8)
+        
+        # The DNS record type we’re looking up. We’ll be looking up A records, whose value is 1.
+        QTYPE = self.getBinary(1, 16)
+        
+        # The class we’re looking up. We’re using the the internet, IN, which has a value of 1
+        QCLASS = self.getBinary(1, 16)
+        
+        temp_question = QNAME + QTYPE + QCLASS
+        
+        # convert the question into hex
+        # do not use extra padding!!!
+        for i in range(0, len(temp_question), 4):
+            hx = hex(int(temp_question[i : i + 4], 2))
+            question_section += hx[2 : 0]
+        
+        for i in range(0, len(question_section), 2):
+            print(question_section[i : i + 2], end=" ")
+            
+        return question_section
+    
+    
     def getIP(self, domain_name):
         self.domain_name = domain_name
+        
+        self.buildQuestion(domain_name);
+        
         return "127.0.0.1"
 
 q = dns_query("8.8.8.8", 53)
-q.buildHeader()
+q.getIP("example.com")
